@@ -1,6 +1,7 @@
 
 import logging
 import openfile
+import os.path
 
 
 logger = logging.getLogger(__name__)
@@ -18,13 +19,13 @@ class IndexedLines:
     you don't have to read the first 100000 sentences before getting that one.
     """
 
-    def __init__(self, fname, suf=".idx"):
+    def __init__(self, fname, suf=".idx.gz"):
         self.fname = fname
         self.suf = suf
         self.f = openfile.openfile(fname)
         try:
             self.load_line_offs()
-        except FileNotFoundError:
+        except (FileNotFoundError, OffsetsAreOutdated):
             self.compute_line_offs()
             self.save_line_offs()
 
@@ -44,14 +45,13 @@ class IndexedLines:
         logger.info("saved line offsets to %s%s", self.fname, self.suf)
 
     def load_line_offs(self):
-        with openfile.openfile(self.fname + self.suf) as f:
-            logger.info(
-                "loading line offsets from %s%s", self.fname, self.suf
-            )
+        offs_fname = self.fname + self.suf
+        if os.path.getmtime(self.fname) > os.path.getmtime(offs_fname):
+            raise OffsetsAreOutdated
+        with openfile.openfile(offs_fname) as f:
+            logger.info("loading line offsets from %s", offs_fname)
             self.lineoffs = list(map(int, f))
-            logger.info(
-                "loaded line offsets to %s%s", self.fname, self.suf
-            )
+            logger.info("loaded line offsets to %s", offs_fname)
 
     def __enter__(self):
         return self
@@ -86,3 +86,7 @@ class IndexedLinesIterator:
 
     def __iter__(self):  # pragma: no cover
         return self
+
+
+class OffsetsAreOutdated(Exception):
+    pass
